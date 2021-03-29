@@ -19,6 +19,7 @@
 #include <linux/printk.h>
 
 #include <linux/netdevice.h>
+#include <net/net_namespace.h>
 #include <linux/skbuff.h>
 #include <linux/ethtool.h>
 
@@ -44,6 +45,7 @@ struct fake_eth_t
     isActive_t isActive;
     char name_fake_eth[16];
     u8 mac_addr[ETH_ALEN];
+    // struct net* net_ns;
 };
 
 // declare some func
@@ -75,9 +77,9 @@ ssize_t read_pfs(struct file *filp, char __user *user_data, size_t sz, loff_t *o
     int len = 0;
     char tmp[1000] = "\0";
     len += sprintf(tmp + len, "#for add eth write:\n");
-    len += sprintf(tmp + len, "#  +fake%%d;00:12:13:14:15:16\n");
+    len += sprintf(tmp + len, "#  sudo sh -c 'echo \"+fake%%d;00:12:13:14:15:16\" > /proc/fake_eth'\n");
     len += sprintf(tmp + len, "#for remove eth write: \n");
-    len += sprintf(tmp + len, "#  -fake0\n\n");
+    len += sprintf(tmp + len, "#  sudo sh -c 'echo \"-fake0\" > /proc/fake_eth'\n\n\n");
     len += sprintf(tmp + len, "#current state:\n");
     int j;
     for (j = 0; j < MAX_FAKE_DEV; j++)
@@ -88,8 +90,12 @@ ssize_t read_pfs(struct file *filp, char __user *user_data, size_t sz, loff_t *o
             len += sprintf(tmp + len,
                            "%s;%.2x:%.2x:%.2x:%.2x:%.2x:%.2x\n",
                            devs[j].dev->name,
-                           devs[j].dev->dev_addr[0], devs[j].dev->dev_addr[1], devs[j].dev->dev_addr[2],
-                           devs[j].dev->dev_addr[3], devs[j].dev->dev_addr[4], devs[j].dev->dev_addr[5]);
+                           devs[j].dev->dev_addr[0],
+                           devs[j].dev->dev_addr[1],
+                           devs[j].dev->dev_addr[2],
+                           devs[j].dev->dev_addr[3],
+                           devs[j].dev->dev_addr[4],
+                           devs[j].dev->dev_addr[5]);
         }
     }
 
@@ -100,6 +106,7 @@ ssize_t write_pfs(struct file *filp, const char __user *user_data, size_t sz, lo
 {
     // resive text from userspace
     char tmp[MAX_BUFF] = "\0";
+    // recive from buffer
     ssize_t res = simple_write_to_buffer(tmp, MAX_BUFF - 1, off, user_data, sz);
     // pr_info("resived: %d\n", res);
     // pr_info("%.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x %.2x\n",
@@ -257,6 +264,19 @@ int my_register_netdev(struct fake_eth_t *fake_eth)
 {
     // create dev in network system
     fake_eth->dev = alloc_netdev(0, fake_eth->name_fake_eth, NET_NAME_ENUM, ether_setup);
+
+    pr_info("task_pid_vnr: %d; pid:%d\n", task_pid_vnr(current), current->pid);
+    struct net *target_net_ns = get_net_ns_by_pid(task_pid_vnr(current));
+
+    if (target_net_ns != NULL)
+    {
+        pr_info("netns found!");
+        dev_net_set(fake_eth->dev, target_net_ns);
+    }
+    else
+    {
+        pr_info("netns NOT found!");
+    }
 
     memcpy(fake_eth->dev->dev_addr, fake_eth->mac_addr, ETH_ALEN);
     fake_eth->dev->netdev_ops = &ndo;
