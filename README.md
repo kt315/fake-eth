@@ -9,7 +9,7 @@ Release:	20.04
 Codename:	focal  
 
 ### Build  
-git clone https://github.com/kt-315/fake-eth.git  
+git clone https://github.com/kt315/fake-eth.git  
 cd fake-eth  
 make  
 sudo insmod ./fake-eth.ko  
